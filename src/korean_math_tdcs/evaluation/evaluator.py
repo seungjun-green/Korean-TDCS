@@ -8,7 +8,7 @@ from typing import Any
 from tqdm.auto import tqdm
 
 from korean_math_tdcs.evaluation.benchmarks import gold_answer, load_benchmark, parse_answer
-from korean_math_tdcs.evaluation.generation import generate_one
+from korean_math_tdcs.evaluation.generation import generate_batch
 from korean_math_tdcs.utils.io import append_jsonl, git_commit, utc_timestamp, write_json
 from korean_math_tdcs.utils.seed import seed_everything
 
@@ -65,32 +65,44 @@ def evaluate_loaded(
         examples = load_benchmark(name, config["evaluation"].get(name, {}))
         correct = 0
         subset_counts = defaultdict(lambda: [0, 0])
-        for example in tqdm(examples, desc=f"Evaluating {name}"):
-            result = generate_one(model, tokenizer, example.prompt, generation, recirculation)
-            predicted = parse_answer(result.text, example.parser)
-            expected = gold_answer(example.answer, example.parser)
-            is_correct = predicted is not None and predicted == expected
-            correct += int(is_correct)
-            subset_counts[example.subset][0] += int(is_correct)
-            subset_counts[example.subset][1] += 1
-            total_tokens += result.generated_tokens
-            total_seconds += result.elapsed_seconds
-            peak_memory = max(peak_memory, result.peak_memory_bytes)
-            if predictions_path is not None:
-                append_jsonl(
-                    {
-                        "benchmark": name,
-                        "uid": example.uid,
-                        "subset": example.subset,
-                        "prediction": predicted,
-                        "gold": expected,
-                        "correct": is_correct,
-                        "output": result.text,
-                        "generated_tokens": result.generated_tokens,
-                        "latency_seconds": result.elapsed_seconds,
-                    },
-                    predictions_path,
-                )
+        batch_size = 1 if recirculation else int(config["evaluation"].get("batch_size", 64))
+        progress = tqdm(total=len(examples), desc=f"Evaluating {name}")
+        for start in range(0, len(examples), batch_size):
+            batch = examples[start : start + batch_size]
+            results = generate_batch(
+                model,
+                tokenizer,
+                [example.prompt for example in batch],
+                generation,
+                recirculation,
+            )
+            for example, result in zip(batch, results, strict=True):
+                predicted = parse_answer(result.text, example.parser)
+                expected = gold_answer(example.answer, example.parser)
+                is_correct = predicted is not None and predicted == expected
+                correct += int(is_correct)
+                subset_counts[example.subset][0] += int(is_correct)
+                subset_counts[example.subset][1] += 1
+                total_tokens += result.generated_tokens
+                total_seconds += result.elapsed_seconds
+                peak_memory = max(peak_memory, result.peak_memory_bytes)
+                if predictions_path is not None:
+                    append_jsonl(
+                        {
+                            "benchmark": name,
+                            "uid": example.uid,
+                            "subset": example.subset,
+                            "prediction": predicted,
+                            "gold": expected,
+                            "correct": is_correct,
+                            "output": result.text,
+                            "generated_tokens": result.generated_tokens,
+                            "latency_seconds": result.elapsed_seconds,
+                        },
+                        predictions_path,
+                    )
+            progress.update(len(batch))
+        progress.close()
         summaries[name] = {
             "metric": "exact_match",
             "score": correct / len(examples) if examples else 0.0,

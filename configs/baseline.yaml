@@ -10,6 +10,7 @@ formatting:
   eval_enable_thinking: true
 
 evaluation:
+  batch_size: 64
   benchmarks: [hrm8k, ko_gsm8k, kmmlu_math_stem]
   generation:
     max_new_tokens: 512

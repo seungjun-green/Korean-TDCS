@@ -63,6 +63,15 @@ Any YAML value can be overridden with repeatable `--set dotted.key=value` argume
 `evaluation.<benchmark>.max_samples` and a smaller training configuration for smoke tests; do not
 present such runs as the primary experiment.
 
+Ordinary evaluation uses batched generation (`evaluation.batch_size: 64`) to saturate large GPUs.
+If a smaller GPU runs out of memory, reduce it without changing generation semantics:
+
+```bash
+python scripts/evaluate.py --config configs/baseline.yaml --set evaluation.batch_size=16
+```
+
+Fixed Recirculation remains batch size 1 because its state is propagated sequentially between tokens.
+
 ## Fixed experiment definition
 
 - Training data: `keunhyeung/dmath-ko-reasoning-dpo`, `reasoning-sft`.
@@ -137,4 +146,3 @@ ruff check .
 Full network/GPU smoke checks are intentionally separate because they download model and dataset
 artifacts. Start those with `analyze_difficulty.py`, then a tiny overfit run via command-line
 overrides before committing the full GPU budget.
-

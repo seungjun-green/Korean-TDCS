@@ -16,6 +16,25 @@ class GenerationResult:
     peak_memory_bytes: int
 
 
+def _render_eval_prompt(tokenizer: Any, prompt: str) -> str:
+    return tokenizer.apply_chat_template(
+        [{"role": "user", "content": prompt.strip()}],
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True,
+    )
+
+
+def _generated_length(token_ids: Any, eos_token_ids: set[int], pad_token_id: int) -> int:
+    values = token_ids.tolist()
+    for index, token_id in enumerate(values):
+        if token_id in eos_token_ids:
+            return index + 1
+    while values and values[-1] == pad_token_id:
+        values.pop()
+    return len(values)
+
+
 def _sample(logits: Any, config: dict[str, Any]) -> Any:
     import torch
 
@@ -40,41 +59,95 @@ def generate_one(
     config: dict[str, Any],
     recirculation: dict[str, Any] | None = None,
 ) -> GenerationResult:
+    return generate_batch(model, tokenizer, [prompt], config, recirculation)[0]
+
+
+def generate_batch(
+    model: Any,
+    tokenizer: Any,
+    prompts: list[str],
+    config: dict[str, Any],
+    recirculation: dict[str, Any] | None = None,
+) -> list[GenerationResult]:
     import torch
 
-    input_ids = torch.tensor(
-        [format_eval_prompt(tokenizer, prompt)], dtype=torch.long, device=model.device
-    )
+    if not prompts:
+        return []
+    if recirculation and recirculation.get("enabled", True):
+        if len(prompts) != 1:
+            raise ValueError("Fixed Recirculation currently requires evaluation batch_size=1")
+        input_ids = torch.tensor(
+            [format_eval_prompt(tokenizer, prompts[0])],
+            dtype=torch.long,
+            device=model.device,
+        )
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.synchronize()
+        started = time.perf_counter()
+        output_ids = _generate_recirculation(model, input_ids, config, recirculation)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - started
+        return [
+            GenerationResult(
+                text=tokenizer.decode(output_ids[0], skip_special_tokens=True),
+                generated_tokens=output_ids.shape[1],
+                elapsed_seconds=elapsed,
+                peak_memory_bytes=(
+                    torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
+                ),
+            )
+        ]
+
+    rendered = [_render_eval_prompt(tokenizer, prompt) for prompt in prompts]
+    previous_padding_side = tokenizer.padding_side
+    tokenizer.padding_side = "left"
+    try:
+        inputs = tokenizer(
+            rendered,
+            add_special_tokens=False,
+            padding=True,
+            return_tensors="pt",
+        ).to(model.device)
+    finally:
+        tokenizer.padding_side = previous_padding_side
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
     started = time.perf_counter()
-    if recirculation and recirculation.get("enabled", True):
-        output_ids = _generate_recirculation(model, input_ids, config, recirculation)
-    else:
-        kwargs = {
-            "max_new_tokens": int(config.get("max_new_tokens", 512)),
-            "do_sample": bool(config.get("do_sample", True)),
-            "pad_token_id": tokenizer.pad_token_id or tokenizer.eos_token_id,
-            "eos_token_id": tokenizer.eos_token_id,
-        }
-        if kwargs["do_sample"]:
-            kwargs.update(
-                temperature=float(config.get("temperature", 0.6)),
-                top_p=float(config.get("top_p", 0.95)),
-            )
-        generated = model.generate(input_ids=input_ids, **kwargs)
-        output_ids = generated[:, input_ids.shape[1] :]
+    pad_token_id = tokenizer.pad_token_id
+    if pad_token_id is None:
+        pad_token_id = tokenizer.eos_token_id
+    kwargs = {
+        "max_new_tokens": int(config.get("max_new_tokens", 512)),
+        "do_sample": bool(config.get("do_sample", True)),
+        "pad_token_id": pad_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+    }
+    if kwargs["do_sample"]:
+        kwargs.update(
+            temperature=float(config.get("temperature", 0.6)),
+            top_p=float(config.get("top_p", 0.95)),
+        )
+    generated = model.generate(**inputs, **kwargs)
+    output_ids = generated[:, inputs["input_ids"].shape[1] :]
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
-    text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    return GenerationResult(
-        text=text,
-        generated_tokens=output_ids.shape[1],
-        elapsed_seconds=elapsed,
-        peak_memory_bytes=torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0,
-    )
+    peak_memory = torch.cuda.max_memory_allocated() if torch.cuda.is_available() else 0
+    eos = tokenizer.eos_token_id
+    eos_token_ids = set(eos) if isinstance(eos, list) else ({eos} if eos is not None else set())
+    per_item_elapsed = elapsed / len(prompts)
+    return [
+        GenerationResult(
+            text=tokenizer.decode(token_ids, skip_special_tokens=True),
+            generated_tokens=_generated_length(token_ids, eos_token_ids, pad_token_id),
+            elapsed_seconds=per_item_elapsed,
+            peak_memory_bytes=peak_memory,
+        )
+        for token_ids in output_ids
+    ]
 
 
 def _generate_recirculation(
