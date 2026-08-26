@@ -1,0 +1,57 @@
+seed: 42
+
+model:
+  name: LGAI-EXAONE/EXAONE-4.0-1.2B
+  dtype: auto
+  attn_implementation: sdpa
+
+data:
+  dataset: keunhyeung/dmath-ko-reasoning-dpo
+  config: reasoning-sft
+  train_split: train
+  validation_split: validation
+
+formatting:
+  sft_skip_think: false
+  eval_enable_thinking: true
+
+training:
+  learning_rate: 1.0e-5
+  epochs: 4
+  max_seq_length: 512
+  effective_batch_size: 32
+  micro_batch_size: 32
+  expected_example_draws: 10832
+  expected_optimizer_steps: 339
+  assistant_only_loss: true
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  weight_decay: 0.0
+  lr_scheduler_type: constant
+  warmup_steps: 0
+
+lora:
+  rank: 64
+  alpha: 128
+  dropout: 0.05
+  target_modules: all-linear
+
+difficulty:
+  source: gold_trace_length
+  num_levels: 5
+  validate_primary_counts: true
+  boundaries:
+    d1_max: 1
+    d2_max: 2
+    d3_max: 3
+    d4_max: 4
+
+sampling:
+  method: random
+
+audit:
+  output: results/dataset_audit/dmath_tdcs_audit.json
+
+output:
+  run_dir: results/sft/run_001
+

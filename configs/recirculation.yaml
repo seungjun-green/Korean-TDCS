@@ -1,0 +1,61 @@
+seed: 42
+
+model:
+  name: LGAI-EXAONE/EXAONE-4.0-1.2B
+  adapter: null  # Set to results/sft/run_001/adapter or results/tdcs/run_001/adapter.
+  dtype: auto
+  device_map: auto
+  attn_implementation: sdpa
+
+evaluation:
+  benchmarks: [hrm8k, ko_gsm8k, kmmlu_math_stem]
+  generation:
+    max_new_tokens: 512
+    do_sample: true
+    temperature: 0.6
+    top_p: 0.95
+  validation_math:
+    dataset: keunhyeung/dmath-ko-reasoning-dpo
+    config: reasoning-sft
+    split: validation
+    max_samples: 128
+  hrm8k:
+    dataset: HAERAE-HUB/HRM8K
+    subsets: [GSM8K, MATH, OMNI_MATH, MMMLU, KSM]
+    split: test
+    max_samples: null
+  ko_gsm8k:
+    dataset: thunder-research-group/SNU_Ko-GSM8K
+    split: test
+    max_samples: null
+  kmmlu_math_stem:
+    dataset: HAERAE-HUB/KMMLU
+    split: test
+    subjects:
+      - Biology
+      - Chemical-Engineering
+      - Chemistry
+      - Civil-Engineering
+      - Computer-Science
+      - Ecology
+      - Electrical-Engineering
+      - Information-Technology
+      - Materials-Engineering
+      - Math
+      - Mechanical-Engineering
+    strict_subjects: false
+    max_samples: null
+
+recirculation:
+  mode: fixed
+  source_layers: null
+  destination_layers: null
+  alphas: [0.04, 0.07, 0.10, 0.15, 0.16]
+  source_layer: null
+  destination_layer: null
+  alpha: null
+  beta: null
+
+output:
+  sweep_path: results/recirculation/sweep.json
+  results_path: results/recirculation/metrics.json

@@ -1,0 +1,47 @@
+seed: 42
+
+model:
+  name: LGAI-EXAONE/EXAONE-4.0-1.2B
+  dtype: auto
+  device_map: auto
+  attn_implementation: sdpa
+
+formatting:
+  eval_enable_thinking: true
+
+evaluation:
+  benchmarks: [hrm8k, ko_gsm8k, kmmlu_math_stem]
+  generation:
+    max_new_tokens: 512
+    do_sample: true
+    temperature: 0.6
+    top_p: 0.95
+  hrm8k:
+    dataset: HAERAE-HUB/HRM8K
+    subsets: [GSM8K, MATH, OMNI_MATH, MMMLU, KSM]
+    split: test
+    max_samples: null
+  ko_gsm8k:
+    dataset: thunder-research-group/SNU_Ko-GSM8K
+    split: test
+    max_samples: null
+  kmmlu_math_stem:
+    dataset: HAERAE-HUB/KMMLU
+    split: test
+    subjects:
+      - Biology
+      - Chemical-Engineering
+      - Chemistry
+      - Civil-Engineering
+      - Computer-Science
+      - Ecology
+      - Electrical-Engineering
+      - Information-Technology
+      - Materials-Engineering
+      - Math
+      - Mechanical-Engineering
+    strict_subjects: false
+    max_samples: null
+
+output:
+  results_path: results/baseline/metrics.json

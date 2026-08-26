@@ -1,0 +1,41 @@
+{
+  "dataset": "keunhyeung/dmath-ko-reasoning-dpo",
+  "config": "reasoning-sft",
+  "dataset_revision": null,
+  "tokenizer": "LGAI-EXAONE/EXAONE-4.0-1.2B",
+  "tokenizer_revision": null,
+  "train_rows": 2708,
+  "validation_rows": 682,
+  "operator_count_distribution": {
+    "1": 575,
+    "2": 984,
+    "3": 510,
+    "4": 325,
+    "5": 177,
+    "6": 81,
+    "7": 24,
+    "8": 22,
+    "9": 4,
+    "10": 2,
+    "11": 3,
+    "12": 1
+  },
+  "tdcs_level_distribution": {
+    "D1": 575,
+    "D2": 984,
+    "D3": 510,
+    "D4": 325,
+    "D5": 314
+  },
+  "serialized_token_length": {
+    "min": 48,
+    "max": 439
+  },
+  "max_seq_length": 512,
+  "truncated_examples": [],
+  "samples": [
+    "[|user|]\n(가) 기계로 장난감 60개를 만드는 데 5일 걸립니다. (가) 기계로 540개의 장난감을 만드는 데 며칠이 걸립니까?[|endofturn|]\n[|assistant|]\n<think>\n난감이 몇 배로 늘었는지 구하면 540 ÷ 60 = 9입니다. 늘어난 배수만큼 걸리는 날을 구하면 9 × 5 = 45입니다.\n</think>\n\n정답은 45입니다.[|endofturn|]\n",
+    "[|user|]\n(가) 동물 6마리, (나) 동물 8마리, (다) 동물 4마리가 있습니다. 동물은 모두 몇 마리입니까?[|endofturn|]\n[|assistant|]\n<think>\n저 가의 동물과 나의 동물을 합하면 6 + 8 = 14입니다. 이제 앞의 합에 다의 동물을 더하면 14 + 4 = 18입니다.\n</think>\n\n정답은 18입니다.[|endofturn|]\n",
+    "[|user|]\n(가) 동물 45마리와 (나) 동물 32마리를 기릅니다. (나) 동물과 (다) 동물을 합하면 (가) 동물보다 8마리 적습니다. (다) 동물은 몇 마리입니까?[|endofturn|]\n[|assistant|]\n<think>\n와 나의 마리수 차이를 구하면 45 - 32 = 13입니다. 그 차이에서 8마리만큼 더 적은 값을 구하면 13 - 8 = 5입니다.\n</think>\n\n정답은 5입니다.[|endofturn|]\n"
+  ]
+}
