@@ -125,9 +125,8 @@ parser behavior remains auditable.
 
 ## Benchmarks
 
-- [HRM8K](https://huggingface.co/datasets/HAERAE-HUB/HRM8K), all five released subsets;
-- [SNU Ko-GSM8K](https://huggingface.co/datasets/thunder-research-group/SNU_Ko-GSM8K); and
-- [KMMLU](https://huggingface.co/datasets/HAERAE-HUB/KMMLU), explicit Math/STEM subject configs.
+- [HRM8K](https://huggingface.co/datasets/HAERAE-HUB/HRM8K), all five released subsets; and
+- [SNU Ko-GSM8K](https://huggingface.co/datasets/thunder-research-group/SNU_Ko-GSM8K).
 
 The relevant methods are [TDCS (arXiv:2608.17268)](https://arxiv.org/abs/2608.17268) and
 [Recirculation (arXiv:2608.17981)](https://arxiv.org/abs/2608.17981). Recirculation layer numbers

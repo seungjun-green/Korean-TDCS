@@ -11,7 +11,7 @@ evaluation:
   # Ordinary evaluation is batched; fixed Recirculation overrides this to 1.
   batch_size: 64
   resume: true
-  benchmarks: [hrm8k, ko_gsm8k, kmmlu_math_stem]
+  benchmarks: [hrm8k, ko_gsm8k]
   generation:
     max_new_tokens: 512
     do_sample: true
@@ -31,24 +31,6 @@ evaluation:
     dataset: thunder-research-group/SNU_Ko-GSM8K
     split: test
     max_samples: null
-  kmmlu_math_stem:
-    dataset: HAERAE-HUB/KMMLU
-    split: test
-    subjects:
-      - Biology
-      - Chemical-Engineering
-      - Chemistry
-      - Civil-Engineering
-      - Computer-Science
-      - Ecology
-      - Electrical-Engineering
-      - Information-Technology
-      - Materials-Engineering
-      - Math
-      - Mechanical-Engineering
-    strict_subjects: false
-    max_samples: null
-
 recirculation:
   mode: fixed
   source_layers: null
