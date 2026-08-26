@@ -38,3 +38,4 @@ def test_choice_parser():
 def test_symbolic_math_parser_does_not_collapse_to_last_number():
     assert normalize_math(r"\boxed{3\sqrt{5}}") == r"3\sqrt{5}"
     assert normalize_math(r"\frac{1}{6}") == "0.1666666666666666666666666667"
+    assert normalize_math("") is None

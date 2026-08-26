@@ -223,6 +223,8 @@ def _boxed_content(text: str) -> str | None:
 
 def normalize_math(value: Any) -> str | None:
     text = reasoning_final(str(value)).strip()
+    if not text:
+        return None
     candidate = _boxed_content(text)
     if candidate is None:
         hashes = re.findall(r"####\s*([^\n]+)", text)

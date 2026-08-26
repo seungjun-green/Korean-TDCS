@@ -71,6 +71,9 @@ python scripts/evaluate.py --config configs/baseline.yaml --set evaluation.batch
 ```
 
 Fixed Recirculation remains batch size 1 because its state is propagated sequentially between tokens.
+Evaluation predictions are appended continuously and resumed by UID after an interruption. Set
+`evaluation.resume=false` (or delete the corresponding `*_predictions.jsonl`) when intentionally
+changing a model, prompt, parser, or generation configuration while reusing the same results path.
 
 ## Fixed experiment definition
 

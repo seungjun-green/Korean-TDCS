@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections import defaultdict
 from pathlib import Path
@@ -13,6 +14,21 @@ from korean_math_tdcs.utils.io import append_jsonl, git_commit, utc_timestamp, w
 from korean_math_tdcs.utils.seed import seed_everything
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _load_existing_predictions(path: str | Path | None) -> dict[str, dict[str, Any]]:
+    if path is None or not Path(path).exists():
+        return {}
+    records: dict[str, dict[str, Any]] = {}
+    with Path(path).open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                LOGGER.warning("Ignoring malformed prediction line %d in %s", line_number, path)
+                continue
+            records[str(record["uid"])] = record
+    return records
 
 
 def load_inference_model(config: dict[str, Any]) -> tuple[Any, Any]:
@@ -61,14 +77,32 @@ def evaluate_loaded(
     total_tokens = 0
     total_seconds = 0.0
     peak_memory = 0
+    existing_predictions = _load_existing_predictions(predictions_path)
     for name in benchmarks:
         examples = load_benchmark(name, config["evaluation"].get(name, {}))
-        correct = 0
+        benchmark_uids = {example.uid for example in examples}
+        resumed = {
+            uid: record
+            for uid, record in existing_predictions.items()
+            if uid in benchmark_uids and record.get("benchmark") == name
+        }
+        correct = sum(int(record["correct"]) for record in resumed.values())
         subset_counts = defaultdict(lambda: [0, 0])
+        for record in resumed.values():
+            subset_counts[record["subset"]][0] += int(record["correct"])
+            subset_counts[record["subset"]][1] += 1
+            total_tokens += int(record.get("generated_tokens", 0))
+            total_seconds += float(record.get("latency_seconds", 0.0))
+            peak_memory = max(peak_memory, int(record.get("peak_memory_bytes", 0)))
+        pending = [example for example in examples if example.uid not in resumed]
         batch_size = 1 if recirculation else int(config["evaluation"].get("batch_size", 64))
-        progress = tqdm(total=len(examples), desc=f"Evaluating {name}")
-        for start in range(0, len(examples), batch_size):
-            batch = examples[start : start + batch_size]
+        progress = tqdm(
+            total=len(examples),
+            initial=len(resumed),
+            desc=f"Evaluating {name}",
+        )
+        for start in range(0, len(pending), batch_size):
+            batch = pending[start : start + batch_size]
             results = generate_batch(
                 model,
                 tokenizer,
@@ -98,6 +132,7 @@ def evaluate_loaded(
                             "output": result.text,
                             "generated_tokens": result.generated_tokens,
                             "latency_seconds": result.elapsed_seconds,
+                            "peak_memory_bytes": result.peak_memory_bytes,
                         },
                         predictions_path,
                     )
@@ -128,7 +163,7 @@ def evaluate(config: dict[str, Any]) -> dict[str, Any]:
     model, tokenizer = load_inference_model(config)
     output = Path(config["output"]["results_path"])
     predictions = output.with_name(output.stem + "_predictions.jsonl")
-    if predictions.exists():
+    if predictions.exists() and not config["evaluation"].get("resume", True):
         predictions.unlink()
     recirculation = config.get("recirculation")
     if (

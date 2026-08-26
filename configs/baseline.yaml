@@ -11,6 +11,7 @@ formatting:
 
 evaluation:
   batch_size: 64
+  resume: true
   benchmarks: [hrm8k, ko_gsm8k, kmmlu_math_stem]
   generation:
     max_new_tokens: 512
