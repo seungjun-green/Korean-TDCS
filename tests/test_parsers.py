@@ -1,9 +1,25 @@
+from korean_math_tdcs.data.formatting import format_eval_prompt
 from korean_math_tdcs.evaluation.benchmarks import (
     normalize_choice,
     normalize_math,
     normalize_numeric,
     parse_answer,
 )
+
+
+class TemplateTokenizer:
+    def apply_chat_template(self, *_args, **kwargs):
+        assert kwargs["tokenize"] is False
+        return "rendered prompt"
+
+    def __call__(self, text, *, add_special_tokens):
+        assert text == "rendered prompt"
+        assert add_special_tokens is False
+        return {"input_ids": [11, 12, 13]}
+
+
+def test_eval_prompt_is_always_a_plain_token_id_list():
+    assert format_eval_prompt(TemplateTokenizer(), "question") == [11, 12, 13]
 
 
 def test_numeric_parser_uses_final_reasoning_text():

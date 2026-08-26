@@ -25,12 +25,16 @@ def format_sft_text(tokenizer: Any, example: dict[str, Any]) -> str:
 
 
 def format_eval_prompt(tokenizer: Any, prompt: str) -> list[int]:
-    return tokenizer.apply_chat_template(
+    # Transformers 4 returned a plain list here by default, while Transformers
+    # 5 returns a BatchEncoding unless return_dict=False. Rendering first keeps
+    # this stable across both APIs and prevents torch.tensor from seeing dict keys.
+    rendered = tokenizer.apply_chat_template(
         [{"role": "user", "content": prompt.strip()}],
-        tokenize=True,
+        tokenize=False,
         add_generation_prompt=True,
         enable_thinking=True,
     )
+    return tokenizer(rendered, add_special_tokens=False)["input_ids"]
 
 
 @dataclass
