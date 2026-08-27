@@ -1,4 +1,4 @@
-from korean_math_tdcs.data.formatting import format_eval_prompt
+from korean_math_tdcs.data.formatting import format_eval_prompt, format_sft_text
 from korean_math_tdcs.evaluation.benchmarks import (
     normalize_choice,
     normalize_math,
@@ -18,8 +18,31 @@ class TemplateTokenizer:
         return {"input_ids": [11, 12, 13]}
 
 
+class SFTTemplateTokenizer:
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs["tokenize"] is False
+        assistant = messages[-1]
+        assert assistant["reasoning_content"] == "풀이 과정"
+        assert assistant["content"] == "정답"
+        assert "<think>" not in assistant["content"]
+        return (
+            f"[|user|]\n{messages[0]['content']}\n"
+            f"[|assistant|]\n<think>\n{assistant['reasoning_content']}\n</think>\n\n"
+            f"{assistant['content']}"
+        )
+
+
 def test_eval_prompt_is_always_a_plain_token_id_list():
     assert format_eval_prompt(TemplateTokenizer(), "question") == [11, 12, 13]
+
+
+def test_sft_prompt_uses_structured_reasoning_content():
+    rendered = format_sft_text(
+        SFTTemplateTokenizer(),
+        {"instruction": "문제", "reasoning": "풀이 과정", "response": "정답"},
+    )
+
+    assert "<think>\n풀이 과정\n</think>" in rendered
 
 
 def test_numeric_parser_uses_final_reasoning_text():

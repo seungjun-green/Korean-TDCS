@@ -13,7 +13,11 @@ def format_sft_text(tokenizer: Any, example: dict[str, Any]) -> str:
         {"role": "user", "content": str(example["instruction"]).strip()},
         {
             "role": "assistant",
-            "content": assistant_content(str(example["reasoning"]), str(example["response"])),
+            # EXAONE's template natively supports a separate reasoning field.
+            # Supplying literal <think> tags makes that template reparse and
+            # alter the reasoning text before rendering it.
+            "reasoning_content": str(example["reasoning"]).strip(),
+            "content": str(example["response"]).strip(),
         },
     ]
     return tokenizer.apply_chat_template(
