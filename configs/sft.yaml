@@ -23,6 +23,9 @@ training:
   micro_batch_size: 32
   expected_example_draws: 10832
   expected_optimizer_steps: 339
+  validation_checks_per_epoch: 4
+  early_stopping_patience: 3
+  early_stopping_min_delta: 0.0
   assistant_only_loss: true
   gradient_checkpointing: true
   max_grad_norm: 1.0
@@ -54,4 +57,3 @@ audit:
 
 output:
   run_dir: results/sft/run_001
-

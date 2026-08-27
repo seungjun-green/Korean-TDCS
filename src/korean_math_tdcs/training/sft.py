@@ -17,6 +17,7 @@ from korean_math_tdcs.data.sampling import (
     stage_boundaries,
 )
 from korean_math_tdcs.training.callbacks import RunTimer
+from korean_math_tdcs.training.early_stopping import EarlyStopping, validation_check_steps
 from korean_math_tdcs.training.tdcs_trainer import TDCSState
 from korean_math_tdcs.utils.config import save_config
 from korean_math_tdcs.utils.io import (
@@ -123,6 +124,61 @@ def _optimizer_step(
     return total_loss, training_tokens
 
 
+def _validation_loss(
+    model: Any,
+    dataset: Any,
+    collator: Any,
+    micro_batch_size: int,
+    device: Any,
+) -> tuple[float, int]:
+    import torch
+
+    was_training = model.training
+    model.eval()
+    weighted_loss = 0.0
+    validation_tokens = 0
+    with torch.inference_mode():
+        for start in range(0, len(dataset), micro_batch_size):
+            examples = [
+                dataset[index]
+                for index in range(start, min(start + micro_batch_size, len(dataset)))
+            ]
+            batch = collator(examples)
+            batch = {key: value.to(device) for key, value in batch.items()}
+            with torch.autocast(
+                device_type=device.type,
+                dtype=torch.bfloat16,
+                enabled=device.type == "cuda" and torch.cuda.is_bf16_supported(),
+            ):
+                output = model(**batch, use_cache=False)
+            # Causal-LM loss shifts labels by one token before averaging.
+            supervised_tokens = int((batch["labels"][:, 1:] != -100).sum().item())
+            weighted_loss += float(output.loss.detach()) * supervised_tokens
+            validation_tokens += supervised_tokens
+    if was_training:
+        model.train()
+    if validation_tokens == 0:
+        raise ValueError("Validation split contains no supervised assistant tokens")
+    return weighted_loss / validation_tokens, validation_tokens
+
+
+def _copy_trainable_state(model: Any) -> dict[str, Any]:
+    return {
+        name: parameter.detach().cpu().clone()
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad
+    }
+
+
+def _restore_trainable_state(model: Any, state: dict[str, Any]) -> None:
+    import torch
+
+    parameters = dict(model.named_parameters())
+    with torch.no_grad():
+        for name, value in state.items():
+            parameters[name].copy_(value.to(parameters[name].device, parameters[name].dtype))
+
+
 def train(config: dict[str, Any], method: str) -> dict[str, Any]:
     import torch
 
@@ -133,6 +189,7 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
     run_dir = ensure_dir(config["output"]["run_dir"])
     dataset_dict = load_reasoning_sft(config, with_difficulty=True)
     train_dataset = dataset_dict["train"]
+    validation_dataset = dataset_dict["validation"]
     if config.get("difficulty", {}).get("validate_primary_counts", True):
         validate_primary_counts(train_dataset)
 
@@ -160,6 +217,20 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
     config["training"]["resolved_micro_batch_size"] = micro_batch_size
     config["training"]["resolved_example_draws"] = total_examples
     config["training"]["resolved_optimizer_steps"] = total_steps
+    checks_per_epoch = int(config["training"].get("validation_checks_per_epoch", 0))
+    patience = int(config["training"].get("early_stopping_patience", 0))
+    min_delta = float(config["training"].get("early_stopping_min_delta", 0.0))
+    early_stopping_enabled = checks_per_epoch > 0 or patience > 0
+    if early_stopping_enabled and (checks_per_epoch < 1 or patience < 1):
+        raise ValueError(
+            "validation_checks_per_epoch and early_stopping_patience must both be positive"
+        )
+    check_steps = (
+        validation_check_steps(total_steps, epochs, checks_per_epoch)
+        if early_stopping_enabled
+        else []
+    )
+    config["training"]["resolved_validation_steps"] = check_steps
     if method == "tdcs":
         config["curriculum"]["resolved_stage_boundaries"] = [
             {"level": level, "first_step": start, "last_step": end}
@@ -190,6 +261,16 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
     cumulative_counts = Counter()
     random_batches = None
     tdcs_state = None
+    early_stopping = (
+        EarlyStopping(patience=patience, min_delta=min_delta)
+        if early_stopping_enabled
+        else None
+    )
+    validation_checks = 0
+    total_validation_tokens = 0
+    best_trainable_state = None
+    stopped_early = False
+    completed_steps = 0
     if method == "random":
         indices = random_epoch_indices(len(train_dataset), epochs, seed)
         random_batches = iter(optimizer_batches(indices, effective_batch_size))
@@ -249,6 +330,7 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
             float(config["training"].get("max_grad_norm", 1.0)),
         )
         scheduler.step()
+        completed_steps = step
         total_training_tokens += tokens
         total_draws += len(batch_indices)
         record = {
@@ -263,6 +345,55 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
         append_jsonl(record, run_dir / "training_log.jsonl")
         progress.set_postfix(loss=f"{loss:.4f}")
 
+        if step in check_steps:
+            assert early_stopping is not None
+            validation_loss, validation_tokens = _validation_loss(
+                model,
+                validation_dataset,
+                collator,
+                micro_batch_size,
+                device,
+            )
+            validation_checks += 1
+            total_validation_tokens += validation_tokens
+            improved, should_stop = early_stopping.update(validation_loss, step)
+            if improved:
+                best_trainable_state = _copy_trainable_state(model)
+            validation_record = {
+                "timestamp": utc_timestamp(),
+                "global_step": step,
+                "epoch_progress": step * epochs / total_steps,
+                "validation_loss": validation_loss,
+                "validation_examples": len(validation_dataset),
+                "validation_tokens": validation_tokens,
+                "improved": improved,
+                "best_validation_loss": early_stopping.best_loss,
+                "best_validation_step": early_stopping.best_step,
+                "checks_without_improvement": early_stopping.bad_checks,
+                "early_stopping_patience": patience,
+            }
+            append_jsonl(validation_record, run_dir / "validation_log.jsonl")
+            progress.set_postfix(
+                loss=f"{loss:.4f}",
+                val=f"{validation_loss:.4f}",
+                patience=f"{early_stopping.bad_checks}/{patience}",
+            )
+            if should_stop:
+                stopped_early = True
+                LOGGER.info(
+                    "Early stopping at step %d after %d validation checks; best %.6f at step %d",
+                    step,
+                    validation_checks,
+                    early_stopping.best_loss,
+                    early_stopping.best_step,
+                )
+                break
+
+    if early_stopping_enabled:
+        if best_trainable_state is None:
+            raise RuntimeError("Training completed without a finite validation loss")
+        _restore_trainable_state(model, best_trainable_state)
+
     adapter_dir = ensure_dir(run_dir / "adapter")
     model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
@@ -272,8 +403,19 @@ def train(config: dict[str, Any], method: str) -> dict[str, Any]:
         "timestamp": utc_timestamp(),
         "git_commit": git_commit(),
         "ordinary_example_draws": total_draws,
-        "optimizer_steps": total_steps,
+        "optimizer_steps": completed_steps,
+        "planned_optimizer_steps": total_steps,
         "ordinary_training_tokens": total_training_tokens,
+        "validation_checks": validation_checks,
+        "validation_examples_per_check": len(validation_dataset),
+        "validation_tokens": total_validation_tokens,
+        "early_stopping_enabled": early_stopping_enabled,
+        "validation_checks_per_epoch": checks_per_epoch,
+        "early_stopping_patience": patience,
+        "early_stopping_min_delta": min_delta,
+        "stopped_early": stopped_early,
+        "best_validation_loss": early_stopping.best_loss if early_stopping else None,
+        "best_validation_step": early_stopping.best_step if early_stopping else None,
         "sample_counts_per_difficulty": {str(k): cumulative_counts[k] for k in range(1, 6)},
         "wall_clock_seconds": timer.elapsed_seconds,
         "peak_gpu_memory_bytes": (
