@@ -12,19 +12,14 @@ formatting:
 evaluation:
   batch_size: 64
   resume: true
-  benchmarks: [hrm8k, ko_gsm8k]
+  benchmarks: [olympiad_bench_math_ko]
   generation:
     max_new_tokens: 512
     do_sample: true
     temperature: 0.6
     top_p: 0.95
-  hrm8k:
-    dataset: HAERAE-HUB/HRM8K
-    subsets: [GSM8K, MATH, OMNI_MATH, MMMLU, KSM]
-    split: test
-    max_samples: null
-  ko_gsm8k:
-    dataset: thunder-research-group/SNU_Ko-GSM8K
+  olympiad_bench_math_ko:
+    dataset: ChuGyouk/OlympiadBench-Math-Ko
     split: test
     max_samples: null
 output:

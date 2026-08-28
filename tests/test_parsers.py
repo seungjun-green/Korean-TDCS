@@ -1,5 +1,6 @@
 from korean_math_tdcs.data.formatting import format_eval_prompt, format_sft_text
 from korean_math_tdcs.evaluation.benchmarks import (
+    answers_equal,
     normalize_choice,
     normalize_math,
     normalize_numeric,
@@ -61,4 +62,13 @@ def test_choice_parser():
 def test_symbolic_math_parser_does_not_collapse_to_last_number():
     assert normalize_math(r"\boxed{3\sqrt{5}}") == r"3\sqrt{5}"
     assert normalize_math(r"\frac{1}{6}") == "0.1666666666666666666666666667"
+    assert normalize_math(r"$69$,$84$") == "69,84"
+    assert normalize_math(r"\boxed{69, 84}") == "69,84"
+    assert normalize_math(r"$\frac{1}{2 n+2}$") == r"\frac{1}{2n+2}"
     assert normalize_math("") is None
+
+
+def test_olympiad_math_comparison_uses_symbolic_and_multi_answer_equivalence():
+    assert answers_equal(r"\frac{1}{2(n+1)}", r"\frac{1}{2n+2}", "olympiad_math")
+    assert answers_equal("84,69", "69,84", "olympiad_math")
+    assert answers_equal("1", "k=1", "olympiad_math")

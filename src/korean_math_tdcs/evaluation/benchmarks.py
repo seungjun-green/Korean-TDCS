@@ -79,6 +79,41 @@ def _load_ko_gsm8k(spec: dict[str, Any]) -> list[EvalExample]:
     ]
 
 
+def _load_olympiad_bench_math_ko(spec: dict[str, Any]) -> list[EvalExample]:
+    from datasets import load_dataset
+
+    dataset = load_dataset(
+        spec.get("dataset", "ChuGyouk/OlympiadBench-Math-Ko"),
+        split=spec.get("split", "test"),
+    )
+    examples = []
+    for index, row in enumerate(dataset):
+        answers = row["final_answer"]
+        if not isinstance(answers, list) or len(answers) != 1:
+            raise ValueError(
+                "OlympiadBench-Math-Ko final_answer must be a singleton list; "
+                f"row {index} has {answers!r}"
+            )
+        question = row.get("question_ko") or row.get("question")
+        if not question:
+            raise ValueError(f"OlympiadBench-Math-Ko row {index} has no question text")
+        answer_instruction = (
+            "모든 최종 답을 하나의 \\boxed{...} 안에 쉼표로 구분해 쓰세요."
+            if row.get("is_multiple_answer")
+            else "최종 답을 \\boxed{...} 형식으로 쓰세요."
+        )
+        examples.append(
+            EvalExample(
+                f"olympiad_bench_math_ko/{index}",
+                f"{question}\n\n풀이 후 마지막 줄에 {answer_instruction}",
+                answers[0],
+                "olympiad_math",
+                str(row.get("subfield") or "unknown"),
+            )
+        )
+    return examples
+
+
 def _choice_prompt(row: dict[str, Any]) -> str:
     choices = "\n".join(f"{letter}. {row[letter]}" for letter in "ABCD")
     return (
@@ -138,6 +173,7 @@ def _load_validation(spec: dict[str, Any]) -> list[EvalExample]:
 LOADERS = {
     "hrm8k": _load_hrm8k,
     "ko_gsm8k": _load_ko_gsm8k,
+    "olympiad_bench_math_ko": _load_olympiad_bench_math_ko,
     "kmmlu_math_stem": _load_kmmlu,
     "validation_math": _load_validation,
 }
@@ -268,7 +304,7 @@ def parse_answer(text: str, parser: str) -> str | None:
         return normalize_numeric(final)
     if parser == "choice":
         return normalize_choice(final)
-    if parser == "math":
+    if parser in {"math", "olympiad_math"}:
         return normalize_math(final)
     raise ValueError(f"Unknown parser: {parser}")
 
@@ -278,6 +314,16 @@ def gold_answer(value: Any, parser: str) -> str | None:
         return normalize_numeric(value)
     if parser == "choice":
         return normalize_choice(value)
-    if parser == "math":
+    if parser in {"math", "olympiad_math"}:
         return normalize_math(value)
     raise ValueError(f"Unknown parser: {parser}")
+
+
+def answers_equal(predicted: str | None, expected: str | None, parser: str) -> bool:
+    if predicted is None or expected is None:
+        return False
+    if parser == "olympiad_math":
+        from .olympiad_judge import olympiad_math_equal
+
+        return olympiad_math_equal(expected, predicted)
+    return predicted == expected

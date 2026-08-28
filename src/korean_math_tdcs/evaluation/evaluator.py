@@ -8,7 +8,12 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
-from korean_math_tdcs.evaluation.benchmarks import gold_answer, load_benchmark, parse_answer
+from korean_math_tdcs.evaluation.benchmarks import (
+    answers_equal,
+    gold_answer,
+    load_benchmark,
+    parse_answer,
+)
 from korean_math_tdcs.evaluation.generation import generate_batch
 from korean_math_tdcs.utils.io import append_jsonl, git_commit, utc_timestamp, write_json
 from korean_math_tdcs.utils.seed import seed_everything
@@ -113,7 +118,7 @@ def evaluate_loaded(
             for example, result in zip(batch, results, strict=True):
                 predicted = parse_answer(result.text, example.parser)
                 expected = gold_answer(example.answer, example.parser)
-                is_correct = predicted is not None and predicted == expected
+                is_correct = answers_equal(predicted, expected, example.parser)
                 correct += int(is_correct)
                 subset_counts[example.subset][0] += int(is_correct)
                 subset_counts[example.subset][1] += 1
@@ -138,8 +143,13 @@ def evaluate_loaded(
                     )
             progress.update(len(batch))
         progress.close()
+        metric = (
+            "symbolic_equivalence"
+            if examples and all(example.parser == "olympiad_math" for example in examples)
+            else "exact_match"
+        )
         summaries[name] = {
-            "metric": "exact_match",
+            "metric": metric,
             "score": correct / len(examples) if examples else 0.0,
             "correct": correct,
             "total": len(examples),
