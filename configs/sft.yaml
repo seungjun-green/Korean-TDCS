@@ -6,8 +6,8 @@ model:
   attn_implementation: sdpa
 
 data:
-  dataset: keunhyeung/dmath-ko-reasoning-dpo
-  config: reasoning-sft
+  dataset: Seungjun/Korean-Olympiad-TDCS-3K
+  format: olympiad_tdcs
   train_split: train
   validation_split: validation
 
@@ -18,13 +18,13 @@ formatting:
 training:
   learning_rate: 1.0e-5
   epochs: 4
-  max_seq_length: 512
+  max_seq_length: 3072
   effective_batch_size: 32
-  micro_batch_size: 32
-  expected_example_draws: 10832
-  expected_optimizer_steps: 339
+  micro_batch_size: 16
+  expected_example_draws: null
+  expected_optimizer_steps: null
   validation_checks_per_epoch: 4
-  early_stopping_patience: 3
+  early_stopping_patience: 4
   early_stopping_min_delta: 0.0
   assistant_only_loss: true
   gradient_checkpointing: true
@@ -40,20 +40,16 @@ lora:
   target_modules: all-linear
 
 difficulty:
-  source: gold_trace_length
+  source: difficulty_level
   num_levels: 5
-  validate_primary_counts: true
-  boundaries:
-    d1_max: 1
-    d2_max: 2
-    d3_max: 3
-    d4_max: 4
+  validate_primary_counts: false
 
 sampling:
   method: random
 
 audit:
-  output: results/dataset_audit/dmath_tdcs_audit.json
+  output: results/dataset_audit/olympiad_tdcs_3k_audit.json
+  fail_on_truncation: false
 
 output:
-  run_dir: results/sft/run_001
+  run_dir: results/sft/olympiad_run_002

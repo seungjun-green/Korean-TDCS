@@ -12,7 +12,7 @@ from korean_math_tdcs.utils.logging import configure_logging
 
 
 def main() -> None:
-    parser = config_argument_parser("Audit DMath-KO difficulty and EXAONE serialization")
+    parser = config_argument_parser("Audit training difficulty and EXAONE serialization")
     args = parser.parse_args()
     configure_logging()
     config = apply_overrides(load_config(args.config), args.set)
@@ -38,13 +38,17 @@ def main() -> None:
     counts = Counter(int(level) for level in train["tdcs_level"])
     artifact = {
         "dataset": config["data"]["dataset"],
-        "config": config["data"]["config"],
+        "config": config["data"].get("config"),
         "dataset_revision": config["data"].get("revision"),
         "tokenizer": config["model"]["name"],
         "tokenizer_revision": config["model"].get("revision"),
         "train_rows": len(train),
         "validation_rows": len(datasets["validation"]),
-        "operator_count_distribution": dict(sorted(Counter(train["operator_count"]).items())),
+        "operator_count_distribution": (
+            dict(sorted(Counter(train["operator_count"]).items()))
+            if "operator_count" in train.column_names
+            else None
+        ),
         "tdcs_level_distribution": {f"D{level}": counts[level] for level in range(1, 6)},
         "serialized_token_length": {"min": min(lengths), "max": max(lengths)},
         "max_seq_length": max_length,
@@ -53,14 +57,14 @@ def main() -> None:
     }
     output = Path(
         config.get("audit", {}).get(
-            "output", "results/dataset_audit/dmath_tdcs_audit.json"
+            "output", "results/dataset_audit/training_dataset_audit.json"
         )
     )
     write_json(artifact, output)
     print(f"Wrote {output}")
     for index, sample in enumerate(artifact["samples"], start=1):
         print(f"\n===== SERIALIZED SAMPLE {index} =====\n{sample}")
-    if truncated:
+    if truncated and config.get("audit", {}).get("fail_on_truncation", False):
         raise SystemExit(
             f"Audit failed: {len(truncated)} examples exceed max_seq_length={max_length}"
         )

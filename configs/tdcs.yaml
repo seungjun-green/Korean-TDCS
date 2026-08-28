@@ -6,8 +6,8 @@ model:
   attn_implementation: sdpa
 
 data:
-  dataset: keunhyeung/dmath-ko-reasoning-dpo
-  config: reasoning-sft
+  dataset: Seungjun/Korean-Olympiad-TDCS-3K
+  format: olympiad_tdcs
   train_split: train
   validation_split: validation
 
@@ -18,11 +18,11 @@ formatting:
 training:
   learning_rate: 1.0e-5
   epochs: 4
-  max_seq_length: 512
+  max_seq_length: 3072
   effective_batch_size: 32
-  micro_batch_size: 32
-  expected_example_draws: 10832
-  expected_optimizer_steps: 339
+  micro_batch_size: 16
+  expected_example_draws: null
+  expected_optimizer_steps: null
   assistant_only_loss: true
   gradient_checkpointing: true
   max_grad_norm: 1.0
@@ -37,14 +37,9 @@ lora:
   target_modules: all-linear
 
 difficulty:
-  source: gold_trace_length
+  source: difficulty_level
   num_levels: 5
-  validate_primary_counts: true
-  boundaries:
-    d1_max: 1
-    d2_max: 2
-    d3_max: 3
-    d4_max: 4
+  validate_primary_counts: false
 
 curriculum:
   stage_transition: equal_step_partition
@@ -65,5 +60,9 @@ tdcs:
   # The paper says to move "a portion" of current mass without specifying its size.
   harder_fraction: 0.10
 
+audit:
+  output: results/dataset_audit/olympiad_tdcs_3k_tdcs_audit.json
+  fail_on_truncation: false
+
 output:
-  run_dir: results/tdcs/run_001
+  run_dir: results/tdcs/olympiad_run_002

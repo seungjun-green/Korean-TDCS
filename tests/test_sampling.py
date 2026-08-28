@@ -28,6 +28,16 @@ def test_primary_stage_boundaries():
     ]
 
 
+def test_olympiad_stage_boundaries_are_five_equal_75_step_stages():
+    assert stage_boundaries(375) == [
+        (1, 75),
+        (76, 150),
+        (151, 225),
+        (226, 300),
+        (301, 375),
+    ]
+
+
 def test_random_epochs_visit_every_row_once_per_epoch():
     indices = random_epoch_indices(7, 4, 42)
     assert len(indices) == 28
